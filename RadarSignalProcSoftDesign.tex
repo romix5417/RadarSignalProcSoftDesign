@@ -250,16 +250,118 @@
 \subsection{数据模型理解}
 上一节是介绍了基本的数据模型，在本节中还需要深入的理解一下设计的数据模型，在图2.2中，针
 对数据模型的三个维度进行了进一步的标注。
+\begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//DataBlock2.pdf}
+    \caption{信号处理数据块}\label{DataBlock2}
+\end{figure}
+
+x轴方向标注为距离采样l，脉冲压缩处理便是在这一维度做处理，而多普勒处理则是沿y轴方向，y轴
+方向还有一个很重要的含义，便是脉冲发射后经历相同时延接收到的回波，z轴代表不同的接收通道，
+不同的接收通道具有不同的相位，波束赋形便是在z轴方向来处理的。
+
+在这里我们将一个接收通道的采样数据拿出来详细研究一下，如图2.3所示，将x轴和y轴方向的数据
+转换到时间轴，一个距离库对应一个小方块,同时对应的就是一个采样周期内的采样数据，一列数据
+便是一个PRT内采集到的数据，而一个CPI内的数据，则是多个PRT内的数据采集到一起进行数据处理。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//CPIdata.pdf}
+    \caption{CPI数据}\label{CPIdata}
+\end{figure}
+
+根据上面两节的叙述基本建立了一个数据处理的模型，后面的计算和处理均会在这个三维模型来进行
+展开。
+
+\section{指标算法}
+有了数据处理模型，还需要知道如何处理这个数据模型，现在就像做菜，菜的原材料已经有了，但是
+还需要食谱，然后根据食谱做出想吃的菜，本节就是描述如何进行处理这些原材料。首先需要面对的
+就是3个最基本的指标，反射率强度(Z)，径向速度(V)，速度谱宽(W)，下面就逐个指标来进行计算。
+
+\subsection{反射率强度}
+反射率强度(Z)是雷达回波的最基本指标，在这里主要引用
+《雷达信号处理基础(第二版)》\cite{FundamentalsOfRadarSignalProcessing}中2.2.4节中的
+计算模型，雷达气象学通常采用称为反射率的归一化因子来表示气象目标的散射特性，通常用Z表示,
+体反射率(RCS)公式如下:
+
+\begin{proposition}[体反射率]
+
+    \begin{equation}
+        \eta=\frac{\pi^5|K|^2}{\lambda}Z
+    \end{equation}
+
+    $|K^2|$:对于由水构成的散射体其值近似为0.93，由冰构成的散射体近似为0.197
+
+    $\lambda$:雷达波长
+
+\end{proposition}
+
+当给出一个回波功率测量值，就可以用雷达方程估计出$\eta$，然后利用公式2.1换算成Z，再
+对取10lgZ即得到dBZ。
+
+《雷达信号处理基础(第二版)》\cite{FundamentalsOfRadarSignalProcessing}中2.2.2节给出
+的体散射目标的雷达方程如下：
+\begin{proposition}[体散射雷达方程]
+
+    \begin{equation}
+        p_r\left(t_0\right)=\frac{P_tG^2\lambda^2\eta\Delta R\theta_3\phi_3}{
+                            \left(4\pi\right)^3R_0^2L_sL_a\left(R_0\right)}
+    \end{equation}
+
+    $p_r(t_0)$:$t_0$时刻回波接收功率
+
+    $P_t$:雷达辐射功率
+
+    $G$:天线增益
+
+    $\lambda$:雷达波长
+
+    $\Delta R$:一个距离分辨单元的长度
+
+    $\theta_3$:方位3dB波束宽度
+
+    $\phi_3$:俯仰3dB波束宽度
+
+    $R_0$:分辨单元中心距离
+
+    $L_s$:系统损耗因子
+
+    $L_a(R_0)$:$R_0$处的大气衰减
+\end{proposition}
+
+根据公式2.1和2.2便可以解出Z，综合后的公式如下：
+\begin{proposition}[体散射雷达方程]
+
+    \begin{equation}
+        Z=\frac{64}{\pi^2}*\frac{L_sL_a\left(R_0\right)}
+            {P_tG^2\lambda|K|^2\Delta R\theta_3\phi_3}*R_0^2P_r(t_0)
+    \end{equation}
+
+\end{proposition}
+
+根据公式2.3可以看出只要从上一节中的距离库获取$R_0$和$P_r(t_0)$便可以解出Z的值，公式中
+的其它部分则可以根据相关的系统属性计算为一个常数。
+
+$R_0$的值是比较好计算的，直接使用下面的公式：
+\begin{proposition}[目标距离计算]
+
+    \begin{equation}
+        R_0=\frac{c*t_0}{2} 
+    \end{equation}
+
+    $c$:光速
+
+    $t_0$:接收机接收回波的时间
+
+\end{proposition}
 
 
-在本文的设计中，数据服务器主要负责建立交互通信通道，客户端可以直接穿透Internet网络访问
-内网的综合控制网关设备，获取控制网关的设备信息和数据。
 
-\section{详细设计}
-整个软件系统其实基本符合经典的C/S架构，即客户端与服务端架构，架构图如图2.2所示，设备端运行
-远程配置软件，负责收集数据与服务器程序交互，客户端通过简单的数据配置或者获取接口便可以方
-便的访问数据服务器，设备端其实也是一种特殊的客户端，区别其实只是设备端运行于网关之上，客
-户端则需要运行在PC上，客户端同时还需要交互界面程序与使用者进行友好的交互。
+\subsection{径向速度}
+
+\subsection{速度谱宽}
+
+
 %\begin{figure}[hbtp]
 %    \centering
 %    \includegraphics [width=0.8\textwidth]{figure//NetSoft.pdf}
