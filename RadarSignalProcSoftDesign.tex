@@ -355,6 +355,34 @@ $R_0$的值是比较好计算的，直接使用下面的公式：
 
 \end{proposition}
 
+下面重点介绍一下$P_r(t_0)$的计算，为了得到更好的信噪比，回波功率需要在一个CPI上来计算信
+号功率，相干积累可以增加信噪比主要源于下面三个公式。
+
+\begin{proposition}[相干积累]
+
+    \begin{equation}
+        \chi_1=\frac{A^2}{\sigma_w^2}
+    \end{equation}
+
+    \begin{equation}
+        \sum_{n=0}^{N-1}\left\{Ae^{j\phi}+w\left[n\right]\right\}=NAe^{j\phi}+\sum_{n=0}^{N-1}w\left[n\right]
+    \end{equation}
+
+    \begin{equation}
+        \chi_N=\frac{(NA)^2}{N\sigma_w^2}=N\chi_1
+    \end{equation}
+
+    $\chi_1$:单脉冲的SNR
+
+    $A$:复回波$Ae^{j\phi}$的幅度值
+
+    $\Sigma_w^2$:随机噪声的信号功率
+
+    $w[n]$:噪声信号
+
+    $\chi_N$:N个相干信号累计的SNR
+
+\end{proposition}
 
 
 \subsection{径向速度}
