@@ -394,20 +394,112 @@ $R_0$的值是比较好计算的，直接使用下面的公式：
 有了总功率和噪声功率，很自然便可以得到回波信号的功率$P_r(to)$。
 
 \subsection{径向速度} 
+径向速度的计算主要在慢时间维度(即数据块的y轴方向)进行处理，处理的原理主要是基于多普勒定律，
+针对我司的气象雷达信号处理中多普勒处理主要有以下两个个方法：
+\begin{enumerate}[1)]
+    \itemindent=2em
+    \item MTI(运动目标指示)
+    
+    \qquad MTI处理的目的主要是设计一个高通滤波器滤除杂波,如图2.4所示，
 
+    \begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//MTI.pdf}
+    \caption{MIT处理}\label{MTI}
+    \end{figure}
+
+    \item 脉冲对处理(PPP)\cite{FundamentalsOfRadarSignalProcessing}\cite{radarmeter}
+    \cite{RadarManual}在气象雷达中脉冲对处理主要是为了计算目标谱峰的参数，速度计算如公式6
+    所示，处理原理主要是依据目标速度比较慢，频谱偏移比较小，采用计算相位的办法更为合适，
+    具体的阐述可以看引用网页\cite{dopler.web},在上面做了比较清晰的解释。
+
+    具体的推导原理就是根据图2.5。
+    \begin{figure}[hbtp]
+        \centering
+        \includegraphics [width=1.0\textwidth]{figure//pulse.png}
+        \caption{相位计算}\label{pulse}
+    \end{figure}
+
+    根据图中所示，做如下推导：
+
+    \begin{proposition}[相位计算推导公式]
+        
+        \begin{equation}
+            \phi = \phi_0 +　\frac{4\pi r}{\lambda}
+        \end{equation}
+
+        $\phi_0$:发射信号的相位
+
+        $\phi$:接收信号的相位
+
+        等式两边做微分可得：
+
+        \begin{equation}
+            \frac{d\phi}{dt}=\frac{4\pi}{\lambda}\frac{dr}{dt}
+        \end{equation}
+
+        $dt$:dt就是两个采样之间的时间间隔T
+
+        $\frac{dr}{dt}$:就是速度V
+
+        \begin{equation}
+           V=\frac{\lambda}{4\pi T}d\phi
+        \end{equation}
+
+    \end{proposition}
+
+    在这里主要希望计算的是相位的变化。
+
+    \begin{proposition}[速度计算公式\cite{RadarManual}]
+
+    \begin{equation}
+        R[T]=\frac{1}{N}\sum_{k=0}^{N-1}s[k+1]s^*[k]
+    \end{equation}
+
+    \begin{equation}
+        V_0=\frac{\lambda}{4\pi T}arg\left\{R(T)\right\}
+    \end{equation}
+
+    $R(T)$:相邻两个脉冲的自相关函数
+
+    $s_k$:复通向(I)和正交(Q)信号样本
+
+    $V_0$:径向速度
+
+    $P_n$:噪声功率
+
+    $T$:连续两次取样的时间间隔
+
+    $\lambda$:波长
+
+    \end{proposition}
+
+\end{enumerate}
 
 \subsection{速度谱宽}
 
+计算出径向速度之后，也可以使用自相关函数计算出谱宽，谱宽计算在这里直接采用雷达手册中给出
+的公式,如公式7所示。
 
-%\begin{figure}[hbtp]
-%    \centering
-%    \includegraphics [width=0.8\textwidth]{figure//NetSoft.pdf}
-%    \caption{C/S架构图}\label{NetSoft}
-%\end{figure}
+    \begin{proposition}[谱宽计算公式\cite{RadarManual}]
 
-在基本的框架符合经典C/S架构的情况下，本文将采用大量现有的成熟框架进行服务端和设备客户端
-的设计，在设备端将会采用curl工具开发，服务端则采用开源框架根据需求定制开发，客户端则通过
-浏览器登录远程服务器界面进行人机交互。
+    \begin{equation}
+        \sigma^2\approx\frac{\lambda}{8\pi^2 T^2}arg\left\{1-\frac{R(T)}{R(0)-P_n}\right\}
+    \end{equation}
+
+    $R(T)$:相邻两个脉冲的自相关函数
+
+    $R(0)$:相当于将自己与自己的复共轭相乘之后除以N
+
+    $s_k$:复通向(I)和正交(Q)信号样本
+
+    $V_0$:径向速度
+
+    $T$:连续两次取样的时间间隔
+
+    $\lambda$:波长
+
+    \end{proposition}
 
 \end{spacing}
 
@@ -418,228 +510,62 @@ $R_0$的值是比较好计算的，直接使用下面的公式：
 \begin{spacing}{1.5}
 \songti\zihao{-4}
 
-\section{服务器端}
-\subsection{功能设计}
-服务器端的基本功能主要有三个：
+上一章主要讨论了雷达回波几个关键参数的处理原理，这一章主要讲的是结合硬件设备的软件实现。
+首先需要考虑的问题便是数据的获取，其次便是如何处理数据。
+\section{数据获取}
+\subsection{数据接收}
+在第一章的硬件框图中可以看到，x86板主要通过PCIe接口从FPGA接收数据，接收数据的过程中，主
+要需要考虑的就是接受的数据的数据量大小，而接收数据量大小又和发射脉冲、接收通道等有关，下
+面列出了一个单通道一个CPI数据量评估公式：
 
-\begin{itemize}
-    \itemsep=3pt
-    \parskip=0pt
-    \setlength{\itemindent}{1em}
-    \item 处理设备端消息
-    \item 处理客户端消息
-    \item 数据存储管理
-\end{itemize}
+    \begin{proposition}[数据量算公式]
 
-如图3.1所示，更加形象的描述了服务端的业务逻辑功能。
-%\begin{figure}[hbtp]
-%    \centering
-%    \includegraphics [width=0.8\textwidth]{figure//NetServer.pdf}
-%    \caption{服务器功能设计}\label{NetServer}
-%\end{figure}
+    \begin{equation}
+        Data=4L_{dist}*C_{prt}+C_{prt}*H
+    \end{equation}
 
-在我们的使用场景中设备端和客户端一般都是是处于内网，服务端则分配有公网IP地址，因此设备端
-和客户端均会主动向服务端发起连接，设备端主要将自身的数据信息发送给服务端，服务端接收数据
-之后将数据存储到数据库，等待客户端的查询。在本文中拟采用的rttys同时提供了客户端直接获取
-设备端数据的接口，可以即时操作即时获取相关设备端数据。
+    $4$:表示需要4个字节用来存放IQ两路采样数据
 
+    $L_{dist}$:距离库数目，根据探测距离决定
 
-\subsection{接口设计}
-本节主要对服务端与设备端和客户端的通信接口进行详细设计。
-\begin{enumerate}[(1)]
-    \itemsep=3pt
-    \parskip=0pt
-    \setlength{\itemindent}{2em}
-    \item 设备端接口
+    $C_prt$:PRT个数，在我司研发的系统中采用的是64个PRT
 
-        设备端接口设计成符合HTTP规范的标准接口，接口如下所示：
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=blue!20,colframe=blue!20]
-            https://Server-ip:port/devs
-        \end{tcolorbox}
+    $H$:每个距离库的头部信息字节数
 
-        设备端通过服务器提供的devs接口采用标准post的方式将自己所收集的数据传输给远端服
-        务器，服务器收到数据之后再将其存储起来。
-    \item 客户端接口
+    \end{proposition}
 
-        客户端接口同样也是设计成符合HTTP规范的标准接口，接口如下所示:
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=blue!20,colframe=blue!20]
-            https://Server-ip:port/clients
-        \end{tcolorbox}
-        服务器端clients接口提供给客户端访问的接口，客户端通过clients访问指定的设备，获
-        取设备信息。
-    \item 即时通讯接口
-        客户端通过即时通讯接口可以直接的访问设备端的内容，连接设备的shell命令行，执行相
-        关的设备端命令。
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=blue!20,colframe=blue!20]
-            https://Server-ip:port/cmd \cite{rtty.web}
-        \end{tcolorbox}
+这里可以大概根据公式评估数据量，假设$L_{dist}$值为1500，H为64字节，则大致可以计算出一个
+CPI内单通道数据为379KByte。
 
-\end{enumerate}
+目前PCIe驱动已经完成了调试，接收数据通道目前基本已经打通。
+
+\subsection{数据存储}
+    完成数据的接收之后，主要考虑的是数据要按照计算要求进行存储，以便于进行数据处理。讨论
+到计算处理，需要先来看一下结构。
+
+\section{数据处理}
 
 
-\section{设备端}
-\subsection{功能设计}
-设备端的功能则相对比较简单，主要是通过curl工具根据通信协议将网关设备的信息和与网关设备相
-连接的设备的消息传递给给服务器端，同时从服务器端下载设备配置文件。
-
-%\begin{figure}[H]
-%    \centering
-%    \includegraphics [width=1.0\textwidth]{figure//DevLogic.pdf}
-%    \caption{设备端基本功能}\label{DevLogic}
-%\end{figure}
-
-设备端基本功能和程序处理逻辑如图3.2所示，通过定时维护与服务器的数据传递，获取配置文件和
-将收集的网关、UPS和摄像头等设备的数据传输给服务器端，同时比较从服务器端下载的配置文件与
-当前配置文件，如果配置文件有变化，则解析配置文件配置设备对应的项目。
-
-\subsection{接口设计}
-设备端接口设计成符合HTTP规范的标准接口，接口如下所示：
-    \begin{tcolorbox}[notitle,boxrule=0pt,colback=blue!20,colframe=blue!20]
-        \quad https://Server-ip:port/devs
-    \end{tcolorbox}
-
-设备端通过服务器提供的devs接口采用标准post的方式将自己所收集的数据传输给远端服务器，服
-务器收到数据之后再将其存储起来,同时post的过程中获取服务器的设备配置文件，并和本地文件相
-比较，如果没有变化的不进行设备配置，如果配置文件有变化的配置相应的项目。
-
-\section{客户端}
-\subsection{功能设计}
-在本文中客户端的设计主要采取使用者直接通过浏览器软件登录远程服务器Web进行进行人际交互的
-方式进行，但是考虑到后期可能会有需要将设备管理嵌入到PC端软件或者手机端APP的需求，设计时
-预留客户端接口，通过客户端接口，可以获取对应的设备节点的信息，并且通过该接口也可以设置对
-应的网关设备。基本功能如图3.3所示。
-%\begin{figure}[H]
-%    \centering
-%    \includegraphics [width=0.8\textwidth]{figure//Netclient.pdf}
-%    \caption{客户端基本功能}\label{Netclient}
-%\end{figure}
-
-\subsection{接口设计}
-客户端接口同样也是设计成符合HTTP规范的标准接口，接口如下所示:
-\begin{tcolorbox}[notitle,boxrule=0pt,colback=blue!20,colframe=blue!20]
-    \quad https://Server-ip:port/clients
-\end{tcolorbox}
-服务器端clients接口提供给客户端访问的接口，客户端通过clients访问指定的设备，获
-取设备信息。
 \end{spacing}
 
 %---------------------------------------------------------------------
-%  第四章 协议设计
+%  第四章 详细设计
 %---------------------------------------------------------------------
 \chapter{详细设计}
 \begin{spacing}{1.5}       
 
-本章的协议设计是针对上一章所设计的通讯接口的补充，更加详细描述了通讯接口传输的数据内容和格
-式。
-\begin{enumerate}[(1)]
-    \itemsep=3pt
-    \parskip=0pt
-    \setlength{\itemindent}{2em}
-    \item 设备端通讯协议
-       
-        设备端与服务器通信的协议格式如下:
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=gray!20,colframe=blue!20]
-            \{
+\section{协议设计}
 
-                "DevId"  : id-number,
-
-                "Status" : status-id,
-
-                "name"   : "Dev name",
-
-                "Discrip": "Dev discription",
-
-                "locate" : "position",
-                
-                "time"   : "time",
-
-                "date"   : "xxxx-xx-xx",
-
-                "data"   : [
-
-                    \quad\{
-
-                        \quad\quad"name"   : "son dev name",
-
-                        \quad\quad"status" : status-id,
-
-                        \quad\quad"discrip": "Dev discription",
-
-                        \quad\quad"data"   : [],
-
-                    \quad\},
-
-                    \quad...
-                    
-                ]
-
-            \}
-        \end{tcolorbox}
-        通信协议格式采用标准的json格式，协议内部需要包含设备状态信息和挂载的子设备状态
-        信息。
-        
-    \item 客户端接口
-
-        客户端接口则是通过client获取从服务器获取设备相关的数据和信息，接口协议如下所示：
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=gray!20,colframe=blue!20]
-            \{
-
-                "target-id"  : id-number,
-
-                "Status" : status-id,
-
-                "name"   : "Dev name",
-
-                "Discrip": "Dev discription",
-
-                "locate" : "position",
-                
-                "time"   : "time",
-
-                "date"   : "xxxx-xx-xx",
-
-                "data"   : [
-
-                    \quad\{
-
-                        \quad\quad"name"   : "son dev name",
-
-                        \quad\quad"status" : status-id,
-
-                        \quad\quad"discrip": "Dev discription",
-
-                        \quad\quad"data"   : [],
-
-                    \quad\},
-
-                    \quad...
-                    
-                ]
-
-            \}
-        \end{tcolorbox}
-
-    \item 即时通讯协议
-
-        客户端通过即时通讯接口协议是rtty框架提供的一个直接访问设备的方式，这里参考rtty
-        框架提供的协议，如下所示：
-        \begin{tcolorbox}[notitle,boxrule=0pt,colback=gray!20,colframe=blue!20]
-            curl -k https://server-ip:5912/cmd -d '\{"devid":"test","username":"test",
-
-            "password":"123456","cmd":"ls","params":["/"],"env":\{\}\}'
-        \end{tcolorbox}
-
-\end{enumerate}
+\section{软件框架}
 
 \end{spacing}
 %---------------------------------------------------------------------
-%  第四章 总结
+%  第五章 总结
 %---------------------------------------------------------------------
 \chapter{总结}
 \begin{spacing}{1.5}       
     整个网关网络管理还是比较纷繁复杂的，主要是因为设备分散，且网关后面又连接了一定数量的
     子设备，且网关一般是位于内网，需要穿透公网对网络设备进行网络管理和配置，本文基于功能
-    需求的考虑，结合将要使用的实际环境，参考了rtty和rttys\cite{rtty.web}等开源反向代理程序框架进行方案
     设计。
 \end{spacing}
 
@@ -650,16 +576,15 @@ $R_0$的值是比较好计算的，直接使用下面的公式：
 
 \begin{thebibliography}{99}
 \songti \zihao{-4} 	
-    \bibitem{rtty.web}
-    https://github.com/zhaojh329/rtty
-    \bibitem{rttys.web}
-    https://github.com/zhaojh329/rttys
-    \bibitem{snmp.web}
-    https://tools.ietf.org/html/rfc5343
     \bibitem{FundamentalsOfRadarSignalProcessing}
     Mark A.Richards . 雷达信号处理基础 (第二版) [M]. 2008.
-    
-	
+    \bibitem{radarmeter}
+    张培昌. 雷达气象学[M]. 气象出版社, 1988.
+    \bibitem{dopler.web}
+    http://apollo.lsc.vsc.edu/classes/remote/lecture\_notes/radar/doppler/two\_pulses.html
+    \bibitem{RadarManual}
+    斯科尼克(Skolnik,M.I.) 雷达手册: 第3版/(美) 南京电子研究所, 2010.
+
 \end{thebibliography}
 
 \end{document}
