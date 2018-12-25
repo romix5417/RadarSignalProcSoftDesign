@@ -13,10 +13,10 @@
 \contentsline {section}{\numberline {3.1}数据获取}{12}{section.3.1}
 \contentsline {subsection}{\numberline {3.1.1}数据接收}{12}{subsection.3.1.1}
 \contentsline {subsection}{\numberline {3.1.2}数据存储}{12}{subsection.3.1.2}
-\contentsline {section}{\numberline {3.2}数据处理}{13}{section.3.2}
-\contentsline {chapter}{\numberline {4}详细设计}{14}{chapter.4}
-\contentsline {section}{\numberline {4.1}协议设计}{14}{section.4.1}
-\contentsline {section}{\numberline {4.2}软件框架}{14}{section.4.2}
-\contentsline {chapter}{\numberline {5}总结}{15}{chapter.5}
-\contentsline {chapter}{参考文献}{15}{chapter.5}
+\contentsline {section}{\numberline {3.2}数据处理}{15}{section.3.2}
+\contentsline {chapter}{\numberline {4}详细设计}{17}{chapter.4}
+\contentsline {section}{\numberline {4.1}协议设计}{17}{section.4.1}
+\contentsline {section}{\numberline {4.2}软件框架}{18}{section.4.2}
+\contentsline {chapter}{\numberline {5}总结}{20}{chapter.5}
+\contentsline {chapter}{参考文献}{20}{chapter.5}
 \contentsfinish 

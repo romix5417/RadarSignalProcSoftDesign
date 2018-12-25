@@ -276,7 +276,8 @@ x轴方向标注为距离采样l，脉冲压缩处理便是在这一维度做处
 \section{指标算法}
 有了数据处理模型，还需要知道如何处理这个数据模型，现在就像做菜，菜的原材料已经有了，但是
 还需要食谱，然后根据食谱做出想吃的菜，本节就是描述如何进行处理这些原材料。首先需要面对的
-就是3个最基本的指标，反射率强度(Z)，径向速度(V)，速度谱宽(W)，下面就逐个指标来进行计算。
+就是3个最基本的指标，反射率强度(Z)，径向速度(V)，速度谱宽(W)，下面就逐个指标来进行计算，
+其它指标后续逐步添加进入方案。
 
 \subsection{反射率强度}
 反射率强度(Z)是雷达回波的最基本指标，在这里主要引用
@@ -409,7 +410,9 @@ $R_0$的值是比较好计算的，直接使用下面的公式：
     \end{figure}
 
     \item 脉冲对处理(PPP)\cite{FundamentalsOfRadarSignalProcessing}\cite{radarmeter}
-    \cite{RadarManual}在气象雷达中脉冲对处理主要是为了计算目标谱峰的参数，速度计算如公式6
+    \cite{RadarManual}
+    
+    \qquad 在气象雷达中脉冲对处理主要是为了计算目标谱峰的参数，速度计算如公式6
     所示，处理原理主要是依据目标速度比较慢，频谱偏移比较小，采用计算相位的办法更为合适，
     具体的阐述可以看引用网页\cite{dopler.web},在上面做了比较清晰的解释。
 
@@ -540,13 +543,73 @@ CPI内单通道数据为379KByte。
 目前PCIe驱动已经完成了调试，接收数据通道目前基本已经打通。
 
 \subsection{数据存储}
-    完成数据的接收之后，主要考虑的是数据要按照计算要求进行存储，以便于进行数据处理。讨论
-到计算处理，需要先来看一下结构。
+完成数据的接收之后，主要考虑的是数据要按照计算要求进行存储，以便于进行数据处理。讨论
+到计算处理，需要先来看一下计算部分的物理结构。根据之前的计划，是采用GPU卡来加速信号处理计
+算，目前所使用的GPU卡内部结构基本如图3.1\cite{CudaGuide}所示：
+
+\begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=0.8\textwidth]{figure//GpuStruct.png}
+    \caption{GPU结构}\label{GpuStruct}
+\end{figure}
+
+GPU有独立的内存和网状结构的个内部处理单元可用于并行处理，基本的结构如图3.2所示，一个小
+方块就是代表一个处理单元叫做 Streaming Multiprocessors(SMs)。    
+
+\begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=0.5\textwidth]{figure//block.png}
+    \caption{GPU并行处理单元}\label{block}
+\end{figure}
+
+
+为控制GPU的并行计算处理，Nvidia推出的Cuda对底层物理硬件做了封装，从软件角度来看，并行计
+算单元主要划分为block和Thread，每个block会分配到不同的SMs上执行，并行处理的一个主要的方
+面就是分配Block和Thread的索引。
+
+关于GPU另外一个需要了解的部分就是GPU的内存体系结构，GPU内部内存支持多种的的模式，具体如
+图3.3所示，包括local memory是一个Thread的本地内存，shared memory是一个Block共享的内存，
+而Global memory是全局共享的内存。
+
+\begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=0.4\textwidth]{figure//memory.png}
+    \caption{GPU内存体系结构}\label{memory}
+\end{figure}
+
+上面基本介绍了GPU的体系结构之后，结合雷达信号处理的特点，使用GPU来计算处理雷达数据还是比
+较合适的。在上一章的雷达数据模型的计算中已经描到，针对数据模型的处理主要是按照距离库划分,
+在慢时间维度的数据处理可以分配到每一block进行处理。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics [width=0.7\textwidth]{figure//DataCache.pdf}
+    \caption{数据存储}\label{DataCache}
+\end{figure}
+
+
+根据GPU的内存模型，最好的方法便是在GPU的Global Memory建立一个全局的数据矩阵，数据矩阵的
+格式便是安照雷达数据处理模型来存储，具体的存储模型如图3.4所示进行划分。
 
 \section{数据处理}
+数据处理这一节主要是根据上一章整理的雷达信号处理的算法进行设计实现。上一章描述了主要的计
+算目标就是雷达回波强度、径向速度和谱宽的计算，根据算法的描述基本的计算流程可以如下图3.5
+所示。
 
-
+\begin{figure}[htbp]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//countflow.pdf}
+    \caption{处理流程}\label{countflow}
+    \end{figure}
 \end{spacing}
+
+在CPU一侧主要需要做的处理为数据接收，数据接收处理负责通过PCIe驱动从FPGA接收数据包，数据
+完整性检查处理负责检查每一包数据各项参数是否完整正确，数据转储处理负责将数据从CPU转储到
+GPU全局内存区，同时如果出现GPU内存区数据溢出的情况下，可以在数据转储处理中做一个数据缓冲。
+
+GPU一侧的计算则主要负责算法的并行计算，首先做的便是提取回波噪声功率用于后续计算的使用，然
+后是进行MTI滤波，滤除杂波的处理可以让后续的计算结果更加精确可靠。计算回波强度、计算径向速
+度和计算谱宽的处理则可以并行进行。
 
 %---------------------------------------------------------------------
 %  第四章 详细设计
@@ -555,8 +618,47 @@ CPI内单通道数据为379KByte。
 \begin{spacing}{1.5}       
 
 \section{协议设计}
+本节主要设计了FPGA与上层x86平台的数据包格式，数据包中包含计算处理过程中需要的数据和相关
+参数，具体格式如图4.1所示，使用64个字节作为报文头，数据区则根据距离库的大小进行设计。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//header.pdf}
+    \caption{协议包格式}\label{header}
+\end{figure}
+
+目前格式只是暂定，具体的格式还需要根据结合FPGA进行详细讨论。
 
 \section{软件框架}
+本节主要根据GPU软件设计模型，设计了基本的软件处理框架用于指导后续的代码编写过程。
+\begin{figure}[htbp]
+    \centering
+    \includegraphics [width=0.5\textwidth]{figure//softflow.png}
+    \caption{软件设计模型}\label{softflow}
+\end{figure}
+
+在Cuda官方提供的编程指导\cite{CudaGuide}中提供了一个基本的编程模式，具体如图4.2所示，
+在雷达信号处理的代码中也将遵循这个基本编程模型。
+
+按照基本编程模型设计的软件程序框架如图4.3所示，程序启动之后需要完成对FPGA的初始化，如果
+初始化失败则退出程序。
+
+完成FPGA初始化之后，开始进行数据接收，完成一个数据块的接收之后进行数据有效性检查，确定
+数据为有效数据，然后开始数据的转储，由CPU内存转储到GPU内存，如果GPU内存已经接近溢出，则
+转储处理还需要进行数据缓存，同时完成数据转储之后还会同步需要进行数据接收。同时程序会检查
+GPU内存中的数据是否已经存储完成，一旦完成存储立即开始启动并行计算，计算相应的回波噪声功率，
+对同一个距离库的程序进行滤波处理，完成滤波处理之后进行目标检测，根据目标检测结果决定是否
+进行相关的参数计算。
+
+\begin{figure}[hbtp]
+    \centering
+    \includegraphics [width=1.0\textwidth]{figure//softflow.pdf}
+    \caption{软件设计框架}\label{softflowpdf}
+\end{figure}
+
+如果检测到有目标，则计算回波功率、计算径向速度、计算谱宽，这三个值可以并行计算，算法部分
+的设计将会设计成模块化的模式，每一种算法均可方便进行添加删减，这样便于后续添加更加高级的
+算法处理模块，在完成计算之后，GPU一侧的程序将会将计算结果输出到CPU主机一侧。
 
 \end{spacing}
 %---------------------------------------------------------------------
@@ -564,9 +666,9 @@ CPI内单通道数据为379KByte。
 %---------------------------------------------------------------------
 \chapter{总结}
 \begin{spacing}{1.5}       
-    整个网关网络管理还是比较纷繁复杂的，主要是因为设备分散，且网关后面又连接了一定数量的
-    子设备，且网关一般是位于内网，需要穿透公网对网络设备进行网络管理和配置，本文基于功能
-    设计。
+雷达信号处理部分相关内容比较多且复杂，我司又缺少雷达信处的设计实现经验，并且从理论算法到
+工业实现，整个过程只能在摸索逐步实现，本方案也只是一个初步的讨论方案，但是只要一步一步讨
+论清楚,集思广益，则定能从无到有,从有到优。
 \end{spacing}
 
 %---------------------------------------------------------------------
@@ -584,6 +686,8 @@ CPI内单通道数据为379KByte。
     http://apollo.lsc.vsc.edu/classes/remote/lecture\_notes/radar/doppler/two\_pulses.html
     \bibitem{RadarManual}
     斯科尼克(Skolnik,M.I.) 雷达手册: 第3版/(美) 南京电子研究所, 2010.
+    \bibitem{CudaGuide}
+    CUDA C PROGRAMMING GUIDE, October 2018.
 
 \end{thebibliography}
 
